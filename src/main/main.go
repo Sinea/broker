@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 	"math/rand"
+	"network"
 )
 
 type Queue string
@@ -28,15 +29,15 @@ type Broker interface {
 	Subscribe(queue Queue, consumer Consumer)
 	Join(node Node)
 	Leave(node Node)
-	MarkListen(queue Queue, id int)
+	MarkListen(queue Queue, id uint)
 }
 
 type broker struct {
-	nodeMap  map[int]Node  // Each node is allocated at a fixed index, 32 max
-	queueMap map[Queue]int // Each queue has a mask of known nodes that want these messages
+	nodeMap  map[uint]Node  // Each node is allocated at a fixed index, 32 max
+	queueMap map[Queue]uint // Each queue has a mask of known nodes that want these messages
 }
 
-func (b *broker) MarkListen(queue Queue, id int) {
+func (b *broker) MarkListen(queue Queue, id uint) {
 	b.queueMap[queue] = b.queueMap[queue] | id
 	log.Printf("Queue %s has mask %b", queue, b.queueMap[queue])
 }
@@ -54,7 +55,8 @@ func (b *broker) Join(node Node) {
 }
 
 func (b *broker) Leave(node Node) {
-	panic("implement me")
+	id := node.GetId()
+	delete(b.nodeMap, id)
 }
 
 func (b *broker) Subscribe(queue Queue, consumer Consumer) {
@@ -71,19 +73,19 @@ func (b *broker) Subscribe(queue Queue, consumer Consumer) {
 
 func NewBroker() Broker {
 	const n = 32
-	nodes := make(map[int]Node, n)
+	nodes := make(map[uint]Node, n)
 	for i := 0; i < n; i++ {
-		nodes[i] = nil
+		nodes[uint(i)] = nil
 	}
 
-	return &broker{nodes, make(map[Queue]int, 0)}
+	return &broker{nodes, make(map[Queue]uint, 0)}
 }
 
 func (b *broker) Write(message Message) {
 	targets := b.queueMap[message.queue]
 	for i := 0; i < 32; i++ {
 		if (targets & (1 << uint(i))) != 0 {
-			b.nodeMap[i].Write(message)
+			b.nodeMap[uint(i)].Write(message)
 		}
 	}
 }
@@ -132,31 +134,54 @@ type MessageWriter interface {
 	Write(message Message)
 }
 
+type GossipClient interface {
+	network.TcpClient
+}
+
+type gossipClient struct {
+	broker Broker
+}
+
+func (*gossipClient) Write(bytes []byte) {
+	log.Printf("Gossip: %s", bytes)
+}
+
+func (*gossipClient) Closed() {
+	log.Printf("Gossip: Bye.")
+}
+
 func main() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	broker := NewBroker()
 
-	q1 := Queue("a.b.c")
-	q2 := Queue("x.y.z")
+	server := network.NewTcpServer()
 
-	m1 := Message{q1,[]byte("hello")}
-	m2 := Message{q2,[]byte("bye")}
+	server.Start("0.0.0.0:3333", func() network.TcpClient {
+		return &gossipClient{broker:broker}
+	})
 
-	for i := 0; i < 32; i++ {
-		consumers := make([]Consumer, 0, 0)
-		broker.Join(&virtualNode{
-			broker,
-			consumers,
-			0,
-		})
-	}
 
-	broker.Subscribe(q1, &toLogConsumer{"a: "})
-	broker.Subscribe(q1, &toLogConsumer{"b: "})
-	broker.Subscribe(q2, &toLogConsumer{"c: "})
-
-	broker.Write(m1)
-	broker.Write(m2)
-
+	//
+	//q1 := Queue("a.b.c")
+	//q2 := Queue("x.y.z")
+	//
+	//m1 := Message{q1,[]byte("hello")}
+	//m2 := Message{q2,[]byte("bye")}
+	//
+	//for i := 0; i < 32; i++ {
+	//	consumers := make([]Consumer, 0, 0)
+	//	broker.Join(&virtualNode{
+	//		broker,
+	//		consumers,
+	//		0,
+	//	})
+	//}
+	//
+	//broker.Subscribe(q1, &toLogConsumer{"a: "})
+	//broker.Subscribe(q1, &toLogConsumer{"b: "})
+	//broker.Subscribe(q2, &toLogConsumer{"c: "})
+	//
+	//broker.Write(m1)
+	//broker.Write(m2)
 }
