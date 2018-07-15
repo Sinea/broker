@@ -10,7 +10,7 @@ type Queue string
 
 // ... consumes
 type Consumer interface {
-	Write(message Message)
+	MessageWriter
 }
 
 type toLogConsumer struct {
@@ -23,7 +23,8 @@ func (t *toLogConsumer) Write(message Message) {
 
 // Wrapper for all the nodes in the cluster
 type Broker interface {
-	Write(message Message)
+	MessageWriter
+
 	Subscribe(queue Queue, consumer Consumer)
 	Join(node Node)
 	Leave(node Node)
@@ -69,8 +70,9 @@ func (b *broker) Subscribe(queue Queue, consumer Consumer) {
 }
 
 func NewBroker() Broker {
-	nodes := make(map[int]Node, 0)
-	for i := 0; i < 32; i++ {
+	const n = 32
+	nodes := make(map[int]Node, n)
+	for i := 0; i < n; i++ {
 		nodes[i] = nil
 	}
 
@@ -88,7 +90,8 @@ func (b *broker) Write(message Message) {
 
 // Proxy for a physical node
 type Node interface {
-	Write(message Message)
+	MessageWriter
+
 	Subscribe(queue Queue, consumer Consumer)
 	GetId() uint
 	SetId(id uint)
@@ -125,19 +128,22 @@ type Message struct {
 	body  []byte
 }
 
+type MessageWriter interface {
+	Write(message Message)
+}
+
 func main() {
 	rand.Seed(int64(time.Now().Nanosecond()))
 
 	broker := NewBroker()
 
-	q := Queue("a.b.c")
+	q1 := Queue("a.b.c")
+	q2 := Queue("x.y.z")
 
-	m := Message{
-		q,
-		[]byte("hello"),
-	}
+	m1 := Message{q1,[]byte("hello")}
+	m2 := Message{q2,[]byte("bye")}
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 32; i++ {
 		consumers := make([]Consumer, 0, 0)
 		broker.Join(&virtualNode{
 			broker,
@@ -146,10 +152,11 @@ func main() {
 		})
 	}
 
-	broker.Subscribe(q, &toLogConsumer{"a: "})
-	broker.Subscribe(q, &toLogConsumer{"b: "})
-	broker.Subscribe(q, &toLogConsumer{"c: "})
+	broker.Subscribe(q1, &toLogConsumer{"a: "})
+	broker.Subscribe(q1, &toLogConsumer{"b: "})
+	broker.Subscribe(q2, &toLogConsumer{"c: "})
 
-	broker.Write(m)
+	broker.Write(m1)
+	broker.Write(m2)
 
 }
