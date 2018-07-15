@@ -19,17 +19,6 @@ type TcpServer interface {
 	Start(addr string, factory TcpClientFactory)
 }
 
-type tcpLogger struct {
-}
-
-func (*tcpLogger) Write(bytes []byte) {
-	log.Printf("> %s", bytes)
-}
-
-func (*tcpLogger) Closed() {
-	log.Println("Bye.")
-}
-
 type tcpServer struct {
 }
 
@@ -67,10 +56,4 @@ func (s *tcpServer) Start(addr string, factory TcpClientFactory) {
 
 func NewTcpServer() TcpServer {
 	return &tcpServer{}
-}
-
-func NewLoggerFactory() TcpClientFactory {
-	return func() TcpClient {
-		return &tcpLogger{}
-	}
 }
