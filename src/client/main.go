@@ -6,26 +6,6 @@ import (
 	"network"
 )
 
-type EchoClient interface {
-	Ping()
-}
-
-type echoClient struct {
-	in  chan []byte
-	out chan []byte
-}
-
-func (c *echoClient) Ping() {
-	c.in <- []byte("SEND NUDES")
-}
-
-func (c *echoClient) Run() {
-	for {
-		m := <-c.out
-		log.Printf("Received: %s", m)
-	}
-}
-
 func connectToServer() net.Conn {
 	conn, err := net.Dial("tcp", "0.0.0.0:3333")
 	if err != nil {
