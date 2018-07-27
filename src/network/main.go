@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"time"
+	"errors"
 )
 
 const (
@@ -12,6 +13,7 @@ const (
 	REVERSE
 )
 
+type ByteBufferHandler func(buffer []byte)
 type SocketHandler func(conn net.Conn)
 
 func Listen(address string, handler SocketHandler) error {
@@ -36,57 +38,16 @@ func Listen(address string, handler SocketHandler) error {
 	}
 }
 
-func CreateLoop(conn net.Conn, in <-chan []byte, out chan<- []byte) {
-	go func(conn net.Conn, out chan<- []byte) {
-		for {
-			// Read from socket and send to channel
-			buffer := make([]byte, 1024)
-			conn.SetReadDeadline(time.Now().Add(time.Millisecond))
-			n, err := conn.Read(buffer)
-			if err != nil {
-				if terr, ok := err.(net.Error); ok {
-					if !terr.Timeout() {
-						log.Printf("Not a timeout error: %s", terr)
-					}
-				} else {
-					log.Printf("Error reading from socket: %s", err)
-					break
-				}
-			} else {
-				out <- buffer[:n]
-			}
-		}
-	}(conn, out)
-
-	for {
-		// Read from channel and write to socket
-		buffer := <-in
-		conn.SetWriteDeadline(time.Now().Add(time.Millisecond))
-		n, err := conn.Write(buffer)
-		if err != nil {
-			if terr, ok := err.(net.Error); ok {
-				if !terr.Timeout() {
-					log.Printf("Not a timeout error: %s", terr)
-				}
-			} else {
-				log.Printf("Error reading from socket: %s", err)
-				break
-			}
-		} else {
-			log.Printf("Wrote %d bytes: %X", n, buffer)
-		}
-	}
-}
-
 var tag uint8 = 0
 
 type Message struct {
 	Kind uint8
-	tag uint8
+	tag  uint8
 }
 
 type Client interface {
 	Request(message Message) <-chan Message
+	Reply(reply Message, to Message)
 	Send(message Message)
 	Messages() <-chan Message
 }
@@ -94,30 +55,23 @@ type Client interface {
 type mockClient struct {
 	requests map[uint8]chan Message
 	messages chan Message
-	bytesOut []byte
+	bytesOut chan []byte
+}
+
+func (m *mockClient) Reply(reply Message, to Message) {
+	reply.tag = to.tag
+	m.Send(reply)
 }
 
 func (m *mockClient) Send(message Message) {
-	log.Printf("Send: %d", message.Kind)
-	buffer := []byte{0xEE, message.Kind, message.tag}
-	m.bytesOut = append(m.bytesOut, buffer...)
-	log.Printf("On wire: %X", m.bytesOut)
+	m.bytesOut <- pack(message)
 }
 
 func (m *mockClient) Request(message Message) <-chan Message {
 	c := make(chan Message)
 	message.tag = tag
-	m.requests[message.tag] = c
-
-	// Replace with async
-	go func(t uint8) {
-		time.Sleep(time.Second - time.Millisecond*10)
-		m.requests[t] <- Message{PONG, t}
-		close(m.requests[t])
-		delete(m.requests, t)
-	}(message.tag)
 	tag = (tag + 1) % 0xFF
-
+	m.requests[message.tag] = c
 	m.Send(message)
 
 	return c
@@ -132,7 +86,7 @@ func NewClient(conn net.Conn) Client {
 	client := &mockClient{
 		make(map[uint8]chan Message),
 		make(chan Message),
-		make([]byte, 0),
+		make(chan []byte),
 	}
 
 	// Read
@@ -140,33 +94,83 @@ func NewClient(conn net.Conn) Client {
 		buffer := make([]byte, 0)
 		for {
 			b := make([]byte, 1024)
-			conn.SetReadDeadline(time.Now().Add(time.Millisecond))
-			n, err := conn.Read(buffer)
+			c.SetReadDeadline(time.Now().Add(time.Millisecond))
+			n, err := c.Read(b)
 			if err != nil {
 				if terr, ok := err.(net.Error); ok {
 					if !terr.Timeout() {
 						log.Printf("Not a timeout error: %s", terr)
+						break
 					}
 				} else {
 					log.Printf("Error reading from socket: %s", err)
 					break
 				}
 			} else {
-				buffer = append(buffer, b...)
-				decode(buffer, msgIn)
+				buffer = append(buffer, b[:n]...)
+				m := Message{}
+				if e := unpack(buffer, &m); e != nil {
+					log.Println("Error unpacking")
+					break
+				}
+				buffer = buffer[3:]
+
+				if ch, ok := client.requests[m.tag]; ok {
+					ch <- m
+					close(ch)
+					delete(client.requests, m.tag)
+				} else {
+					client.messages <- m
+				}
 			}
 		}
 	}(conn, client.messages)
 
 	// Write
+	go func(c net.Conn, bts <-chan []byte) {
+		xyz := make([]byte, 0)
+		for {
+			select {
+			case b := <-bts:
+				xyz = append(xyz, b...)
+				break
+			default:
+				if len(xyz) == 0 {
+					time.Sleep(time.Millisecond)
+					continue
+				}
+				c.SetWriteDeadline(time.Now().Add(time.Millisecond))
+				_, err := c.Write(xyz)
+				if err != nil {
+					if terr, ok := err.(net.Error); ok {
+						if !terr.Timeout() {
+							log.Printf("Not a timeout error: %s", terr)
+							break
+						}
+					} else {
+						log.Printf("Error reading from socket: %s", err)
+						break
+					}
+				} else {
+					xyz = make([]byte, 0)
+				}
+			}
+		}
+	}(conn, client.bytesOut)
 
 	return client
 }
 
-func decode(buffer []byte, out chan Message) {
+func unpack(buffer []byte, message *Message) error {
 	if buffer[0] == 0xEE {
-		m := Message{buffer[1], buffer[2]}
-		buffer = buffer[2:]
-		out <- m
+		message.Kind = buffer[1]
+		message.tag = buffer[2]
+		return nil
 	}
+
+	return errors.New(":(")
+}
+
+func pack(message Message) []byte {
+	return []byte{0xEE, message.Kind, message.tag}
 }
