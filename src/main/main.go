@@ -4,7 +4,16 @@ import (
 	"log"
 	"time"
 	"math/rand"
+	"net"
+	"encoding/binary"
+	"flag"
+	"encoding/base64"
 	"network"
+)
+
+const (
+	PING = 1 << iota
+	PONG
 )
 
 type Queue string
@@ -90,6 +99,78 @@ func (b *broker) Write(message Message) {
 	}
 }
 
+type NodeMessage struct {
+	messageType uint8
+	body        []byte
+}
+
+type NodeProxy interface {
+	Send(message NodeMessage)
+}
+
+type physicalNode struct {
+	inBuffer  []byte
+	outBuffer []byte
+}
+
+func (p *physicalNode) Read() []byte {
+	t := p.outBuffer
+	p.outBuffer = make([]byte, 0)
+	//log.Printf("Will send to socket %X", t)
+	return t
+}
+
+func (p *physicalNode) Init(addr net.Addr) {
+	log.Printf("Physical node connected from: %s", addr.String())
+}
+
+func (p *physicalNode) Write(bytes []byte) {
+	p.inBuffer = append(p.inBuffer, bytes...)
+
+	if binary.BigEndian.Uint32(p.inBuffer) == 0xCAFEBABE {
+		size := binary.BigEndian.Uint32(p.inBuffer[4:8])
+		bytes := p.inBuffer[8:8+size]
+		p.Handle(NodeMessage{
+			bytes[0],
+			bytes[1:],
+		})
+	}
+}
+
+func (p *physicalNode) Closed() {
+	log.Println("Physical node disconnected")
+}
+
+func (p *physicalNode) Send(message NodeMessage) {
+	header := make([]byte, 4)
+	binary.BigEndian.PutUint32(header, uint32(0xCAFEBABE))
+	n := len(message.body) + 1
+	b := make([]byte, 5)
+	binary.BigEndian.PutUint32(b, uint32(n))
+	b[4] = message.messageType
+	b = append(b, message.body...)
+	header = append(header, b...)
+
+	p.outBuffer = append(p.outBuffer, header...)
+}
+
+func (p *physicalNode) Handle(message NodeMessage) {
+	switch message.messageType {
+	case PING:
+		log.Println("I got pinged")
+		p.Send(NodeMessage{PONG,make([]byte, 0)})
+		break
+	case PONG:
+		log.Println("I got a PONG response")
+	case 3:
+		log.Printf("Execute: %s", message.body)
+
+		break
+	default:
+		log.Println("Unknown messate type")
+	}
+}
+
 // Proxy for a physical node
 type Node interface {
 	MessageWriter
@@ -134,54 +215,56 @@ type MessageWriter interface {
 	Write(message Message)
 }
 
-type GossipClient interface {
-	network.TcpClient
-}
+func connectToPeer(address string) {
+	conn, err := net.Dial("tcp", address)
 
-type gossipClient struct {
-	broker Broker
-}
+	if err != nil {
+		log.Println("Problem connecting")
+	}
 
-func (*gossipClient) Write(bytes []byte) {
-	log.Printf("Gossip: %s", bytes)
-}
+	log.Println("Connected to peer")
+	node := &physicalNode{}
+	go network.NewTcpLoop(conn, node)
 
-func (*gossipClient) Closed() {
-	log.Printf("Gossip: Bye.")
+	// Just send a ping
+	node.Send(NodeMessage{
+		PING,
+		make([]byte, 0),
+	})
 }
 
 func main() {
+
+	// Setup thy rand
 	rand.Seed(int64(time.Now().Nanosecond()))
 
-	broker := NewBroker()
+	// Get flags
+	listen := flag.String("listen", "0.0.0.0:2222", "")
+	join := flag.String("join", "", "")
+
+	flag.Parse()
+
+	token := base64.StdEncoding.EncodeToString([]byte(*listen))
+
+	log.Printf("Others can join with the token: %s", token)
 
 	server := network.NewTcpServer()
-
-	server.Start("0.0.0.0:3333", func() network.TcpClient {
-		return &gossipClient{broker:broker}
+	go server.Start(*listen, func() network.TcpClient {
+		return &physicalNode{
+			inBuffer:  make([]byte, 0),
+			outBuffer: make([]byte, 0),
+		}
 	})
 
+	if join != nil && len(*join) > 0 {
+		log.Printf("We should join others at %s", *join)
+		peer, err := base64.StdEncoding.DecodeString(*join)
+		if err != nil {
+			panic("Error decoding join token")
 
-	//
-	//q1 := Queue("a.b.c")
-	//q2 := Queue("x.y.z")
-	//
-	//m1 := Message{q1,[]byte("hello")}
-	//m2 := Message{q2,[]byte("bye")}
-	//
-	//for i := 0; i < 32; i++ {
-	//	consumers := make([]Consumer, 0, 0)
-	//	broker.Join(&virtualNode{
-	//		broker,
-	//		consumers,
-	//		0,
-	//	})
-	//}
-	//
-	//broker.Subscribe(q1, &toLogConsumer{"a: "})
-	//broker.Subscribe(q1, &toLogConsumer{"b: "})
-	//broker.Subscribe(q2, &toLogConsumer{"c: "})
-	//
-	//broker.Write(m1)
-	//broker.Write(m2)
+		}
+		go connectToPeer(string(peer))
+	}
+
+	time.Sleep(time.Hour)
 }

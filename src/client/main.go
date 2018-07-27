@@ -4,6 +4,7 @@ import (
 	"net"
 	"log"
 	"network"
+	"time"
 )
 
 func connectToServer() net.Conn {
@@ -16,25 +17,28 @@ func connectToServer() net.Conn {
 	}
 }
 
-func wrapConnection(conn net.Conn) network.Protocol {
-	proto := network.NewProtocol()
+func HealthCheck(client network.Client, interval time.Duration, timeout time.Duration) {
+	for {
+		log.Println("Ping")
+		select {
+		case reply := <-client.Request(network.Message{Kind: network.PING}):
+			if reply.Kind != network.PONG {
+				panic("Wring ping reply")
+			}
+			log.Println("Pong")
+			break
+		case <-time.After(time.Second):
+			panic("Ping timed out")
+			break
+		}
 
-	go network.CreateLoop(conn, proto.BytesOut(), proto.BytesIn())
-	go proto.Run()
-
-	return proto
+		time.Sleep(interval)
+	}
 }
 
 func main() {
-	conn := connectToServer()
-	defer conn.Close()
-	proto := wrapConnection(conn)
-
-	proto.MessagesOut() <- network.Message{network.PING, nil}
-	reply := <-proto.MessagesIn()
-	log.Printf("Received reply: %d", reply.Kind)
-
-	proto.MessagesOut() <- network.Message{network.REVERSE, []byte("bile")}
-	reply = <-proto.MessagesIn()
-	log.Printf("Received reply: %s", reply.Body)
+	//conn := connectToServer()
+	//defer conn.Close()
+	client := network.NewClient(nil)
+	HealthCheck(client, time.Second, 500*time.Millisecond)
 }

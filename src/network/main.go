@@ -14,33 +14,26 @@ const (
 
 type SocketHandler func(conn net.Conn)
 
-type TcpServer interface {
-	Start(addr string, factory SocketHandler)
-}
-
-type tcpServer struct {
-}
-
-func (s *tcpServer) Start(addr string, socketHandler SocketHandler) {
-	log.Printf("Listening on %s", addr)
-	ln, err := net.Listen("tcp", addr)
+func Listen(address string, handler SocketHandler) error {
+	listener, err := net.Listen("tcp", address)
 
 	if err != nil {
-		log.Printf("Error listening on %s", addr)
+		log.Printf("Error listening on %s", address)
+		return err
 	}
+
+	log.Printf("Listening on %s", address)
+	defer listener.Close()
 
 	for {
-		conn, err := ln.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("Error accepting new client: %s", err.Error())
+			return err
 		} else {
-			go socketHandler(conn)
+			go handler(conn)
 		}
 	}
-}
-
-func NewTcpServer() TcpServer {
-	return &tcpServer{}
 }
 
 func CreateLoop(conn net.Conn, in <-chan []byte, out chan<- []byte) {
@@ -85,85 +78,95 @@ func CreateLoop(conn net.Conn, in <-chan []byte, out chan<- []byte) {
 	}
 }
 
-func NewProtocol() Protocol {
-	return &proto{
-		make(chan Message),
-		make(chan Message),
-		make(chan []byte),
-		make(chan []byte),
-		make([]byte, 0),
-	}
-}
-
-type Protocol interface {
-	MessagesIn() <-chan Message
-	MessagesOut() chan<- Message
-
-	BytesIn() chan<- []byte
-	BytesOut() <-chan []byte
-
-	Run()
-}
+var tag uint8 = 0
 
 type Message struct {
 	Kind uint8
-	Body []byte
+	tag uint8
 }
 
-type proto struct {
-	msgIn    chan Message
-	msgOut   chan Message
-	bytesIn  chan []byte
-	bytesOut chan []byte
-	buffer   []byte
+type Client interface {
+	Request(message Message) <-chan Message
+	Send(message Message)
+	Messages() <-chan Message
 }
 
-func (p *proto) BytesIn() chan<- []byte {
-	return p.bytesIn
+type mockClient struct {
+	requests map[uint8]chan Message
+	messages chan Message
+	bytesOut []byte
 }
 
-func (p *proto) BytesOut() <-chan []byte {
-	return p.bytesOut
+func (m *mockClient) Send(message Message) {
+	log.Printf("Send: %d", message.Kind)
+	buffer := []byte{0xEE, message.Kind, message.tag}
+	m.bytesOut = append(m.bytesOut, buffer...)
+	log.Printf("On wire: %X", m.bytesOut)
 }
 
-func (p *proto) MessagesIn() <-chan Message {
-	return p.msgIn
+func (m *mockClient) Request(message Message) <-chan Message {
+	c := make(chan Message)
+	message.tag = tag
+	m.requests[message.tag] = c
+
+	// Replace with async
+	go func(t uint8) {
+		time.Sleep(time.Second - time.Millisecond*10)
+		m.requests[t] <- Message{PONG, t}
+		close(m.requests[t])
+		delete(m.requests, t)
+	}(message.tag)
+	tag = (tag + 1) % 0xFF
+
+	m.Send(message)
+
+	return c
 }
 
-func (p *proto) MessagesOut() chan<- Message {
-	return p.msgOut
+func (m *mockClient) Messages() <-chan Message {
+	return m.messages
 }
 
-func (p *proto) Run() {
-	for {
-		select {
-		case m := <-p.msgOut:
-			p.pack(m)
-		case b := <-p.bytesIn:
-			p.buffer = append(p.buffer, b...)
-			p.unpack()
-		default:
-			time.Sleep(42 * time.Millisecond)
-		}
+func NewClient(conn net.Conn) Client {
+
+	client := &mockClient{
+		make(map[uint8]chan Message),
+		make(chan Message),
+		make([]byte, 0),
 	}
-}
 
-// Write a message to the bytesOut channel
-func (p *proto) pack(message Message) {
-	buffer := []byte{0xCE, uint8(len(message.Body) + 1), message.Kind}
-	buffer = append(buffer, message.Body...)
-	log.Printf("Write bytes: %X", buffer)
-	p.bytesOut <- buffer
-}
-
-// Read from bytes and send to msgIn
-func (p *proto) unpack() {
-	if p.buffer[0] == 0xCE { // We have a valid message header
-		size := uint8(p.buffer[1])
-		if uint8(len(p.buffer)-2) < size { // Not all data was received
-			return
+	// Read
+	go func(c net.Conn, msgIn chan Message) {
+		buffer := make([]byte, 0)
+		for {
+			b := make([]byte, 1024)
+			conn.SetReadDeadline(time.Now().Add(time.Millisecond))
+			n, err := conn.Read(buffer)
+			if err != nil {
+				if terr, ok := err.(net.Error); ok {
+					if !terr.Timeout() {
+						log.Printf("Not a timeout error: %s", terr)
+					}
+				} else {
+					log.Printf("Error reading from socket: %s", err)
+					break
+				}
+			} else {
+				buffer = append(buffer, b...)
+				decode(buffer, msgIn)
+			}
 		}
-		p.msgIn <- Message{p.buffer[2], p.buffer[3:]}
-		p.buffer = p.buffer[2+size:]
+	}(conn, client.messages)
+
+	// Write
+
+	return client
+}
+
+func decode(buffer []byte, out chan Message) {
+	if buffer[0] == 0xEE {
+		m := Message{buffer[1], buffer[2]}
+		buffer = buffer[2:]
+		out <- m
 	}
 }
