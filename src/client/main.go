@@ -2,9 +2,10 @@ package main
 
 import (
 	"net"
-	"log"
-	"network"
 	"time"
+	"github.com/sinea/network/io"
+	"github.com/sinea/network/wire"
+	"github.com/sinea/network/client"
 )
 
 func connectToServer() net.Conn {
@@ -16,28 +17,15 @@ func connectToServer() net.Conn {
 	return conn
 }
 
-func HealthCheck(client network.Client, interval time.Duration, timeout time.Duration) {
-	for {
-		log.Println("Ping")
-		select {
-		case reply := <-client.Request(network.Message{Kind: network.PING}):
-			if reply.Kind != network.PONG {
-				panic("Wring ping reply")
-			}
-			log.Println("Pong")
-			break
-		case <-time.After(time.Second):
-			panic("Ping timed out")
-			break
-		}
-
-		time.Sleep(interval)
-	}
-}
-
 func main() {
 	conn := connectToServer()
-	defer conn.Close()
-	client := network.NewClient(conn)
-	HealthCheck(client, time.Second, 500*time.Millisecond)
+	ioWriter := io.NewWriter(conn)
+	wireWriter := wire.NewWriter(ioWriter)
+	messageWriter := client.NewMessageWriter(wireWriter)
+	for {
+		messageWriter.Write(client.NewMessage(5, []byte{0xCA, 0xFE}))
+		time.Sleep(time.Second)
+	}
+
+	time.Sleep(time.Hour)
 }

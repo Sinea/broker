@@ -1,30 +1,28 @@
 package main
 
 import (
-	"network"
-	"net"
 	"log"
+	"net"
+	"github.com/sinea/network/client"
+	"github.com/sinea/network/wire"
+	"github.com/sinea/network/io"
 )
 
-func connectionHandler(conn net.Conn) {
-	log.Println("New client connected")
-	client := network.NewClient(conn)
+func main() {
+
+	listener, _ := net.Listen("tcp", "0.0.0.0:3333")
+
+	conn, _ := listener.Accept()
+
+	messages := client.NewReader()
+	w := wire.NewReader(messages)
+	io.NewReader(conn, w)
 
 	for {
 		select {
-		case message := <-client.Messages():
-
-			switch message.Kind {
-			case network.PING:
-				client.Reply(network.Message{Kind: network.PONG}, message)
-				break
-			}
-
+		case m := <-messages.Messages():
+			log.Printf("Received %d : %X", m.Kind(), m.Body())
 			break
 		}
 	}
-}
-
-func main() {
-	network.Listen("0.0.0.0:3333", connectionHandler)
 }
