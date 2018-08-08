@@ -10,9 +10,9 @@ type messageWriter struct {
 	next io.Writer
 }
 
-func (m *messageWriter) Write(serializable Message) {
-	buffer := []byte{serializable.Kind(), serializable.Flags()}
-	buffer = append(buffer, serializable.Body()...)
+func (m *messageWriter) Write(message Message) {
+	buffer := []byte{message.Kind(), message.Flags()}
+	buffer = append(buffer, message.Body()...)
 
 	m.next.Write(buffer)
 }
