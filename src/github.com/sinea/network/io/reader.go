@@ -6,21 +6,30 @@ import (
 )
 
 func NewReader(conn net.Conn, writer Writer) {
-	go func(c net.Conn) {
-		for {
-			c.SetReadDeadline(time.Now().Add(time.Millisecond))
-			b := make([]byte, 1024)
-			n, err := c.Read(b)
-			if err != nil {
-				if e, ok := err.(net.Error); ok && e.Timeout() {
-					
-				} else {
-					panic(err)
+	go read(conn, writer)
+}
+
+func read(conn net.Conn, writer Writer) {
+	for {
+		if err := conn.SetReadDeadline(time.Now().Add(33 * time.Millisecond)); err != nil {
+			panic(err)
+		}
+
+		b := make([]byte, 1024)
+		n, err := conn.Read(b)
+
+		if err != nil {
+			if e, ok := err.(net.Error); ok {
+				if !e.Temporary() && !e.Timeout() {
+					panic(e)
 				}
 			} else {
-				writer.Write(b[:n])
+				panic(err)
 			}
-			time.Sleep(time.Millisecond)
 		}
-	}(conn)
+
+		if n != 0 {
+			writer.Write(b[:n])
+		}
+	}
 }

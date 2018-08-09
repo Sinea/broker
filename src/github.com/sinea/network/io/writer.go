@@ -2,7 +2,6 @@ package io
 
 import (
 	"net"
-	"log"
 	"time"
 	"sync"
 )
@@ -19,7 +18,6 @@ type socketWriter struct {
 }
 
 func (s *socketWriter) Write(buffer []byte) {
-	log.Printf("Push : %X", buffer)
 	s.queue = append(s.queue, buffer)
 	s.lock.Lock()
 	if !s.isWriting {
@@ -31,27 +29,35 @@ func (s *socketWriter) Write(buffer []byte) {
 
 func write(writer *socketWriter, conn net.Conn) {
 	for {
-		if len(writer.queue) != 0 {
-			conn.SetWriteDeadline(time.Now().Add(time.Millisecond))
-			b := writer.queue[0]
-			writer.queue = writer.queue[1:]
-			n, err := conn.Write(b)
-			if err != nil {
-				if err, ok := err.(net.Error); ok && err.Timeout() {
-					//log.Println("Just a timeout")
-				} else {
-					log.Fatalf("Strage error: %s", err)
-					panic(err)
+		if len(writer.queue) == 0 {
+			break
+		}
+
+		if err := conn.SetWriteDeadline(time.Now().Add(time.Millisecond)); err != nil {
+			panic(err)
+		}
+
+		buffer := writer.queue[0]
+		writer.queue = writer.queue[1:]
+		n, err := conn.Write(buffer)
+
+		if err != nil {
+			if e, ok := err.(net.Error); ok {
+				if !e.Temporary() && !e.Timeout() {
+					panic(e)
 				}
+			} else {
+				panic(err)
 			}
-			if n < len(b) {
-				writer.queue = append([][]byte{b[n:]}, writer.queue...)
-			}
+		}
+
+		if n < len(buffer) { // Wrote less bytes than there are in the current buffer
+			writer.queue = append([][]byte{buffer[n:]}, writer.queue...)
 		}
 		time.Sleep(time.Millisecond)
 	}
 
-	writer.isWriting = true
+	writer.isWriting = false
 }
 
 func NewWriter(conn net.Conn) Writer {
