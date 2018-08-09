@@ -12,8 +12,10 @@ func NewReader(conn net.Conn, writer Writer) {
 			b := make([]byte, 1024)
 			n, err := c.Read(b)
 			if err != nil {
-				if err, ok := err.(net.Error); ok && err.Timeout() {
-					//log.Println("Just a timeout error")
+				if e, ok := err.(net.Error); ok && e.Timeout() {
+					
+				} else {
+					panic(err)
 				}
 			} else {
 				writer.Write(b[:n])
