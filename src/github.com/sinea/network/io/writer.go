@@ -43,7 +43,7 @@ func write(writer *socketWriter, conn net.Conn) {
 
 		if err != nil {
 			if e, ok := err.(net.Error); ok {
-				if !e.Temporary() && !e.Timeout() {
+				if !e.Timeout() {
 					panic(e)
 				}
 			} else {

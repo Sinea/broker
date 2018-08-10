@@ -10,17 +10,17 @@ func NewReader(conn net.Conn, writer Writer) {
 }
 
 func read(conn net.Conn, writer Writer) {
+	b := make([]byte, 1024)
 	for {
-		if err := conn.SetReadDeadline(time.Now().Add(33 * time.Millisecond)); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
 			panic(err)
 		}
 
-		b := make([]byte, 1024)
 		n, err := conn.Read(b)
 
 		if err != nil {
 			if e, ok := err.(net.Error); ok {
-				if !e.Temporary() && !e.Timeout() {
+				if !e.Timeout() {
 					panic(e)
 				}
 			} else {
