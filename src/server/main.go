@@ -2,10 +2,8 @@ package main
 
 import (
 	"log"
-	"net"
 	"github.com/sinea/network/client"
-	"github.com/sinea/network/wire"
-	"github.com/sinea/network/io"
+	"github.com/sinea/network/p2p"
 )
 
 func Handle(m interface{}) {
@@ -16,7 +14,7 @@ func Handle(m interface{}) {
 		break
 	case *client.Goodbye:
 		g := m.(*client.Goodbye)
-		log.Printf("Goodbye %d", g.From)
+		log.Printf("Goodbye %s", g.From)
 		break
 	default:
 		panic("unknown type")
@@ -24,16 +22,25 @@ func Handle(m interface{}) {
 }
 
 func main() {
+	log.Println("Starting server")
+	//listener, _ := net.Listen("tcp", "0.0.0.0:3333")
+	//
+	//conn, _ := listener.Accept()
+	//
+	//messages := client.NewReader()
+	//w := wire.NewReader(messages)
+	//io.NewReader(conn, w)
+	//
+	//for {
+	//	Handle(<-messages.Messages())
+	//}
 
-	listener, _ := net.Listen("tcp", "0.0.0.0:3333")
+	c := p2p.NewClient()
 
-	conn, _ := listener.Accept()
+	m := <-c.Messages()
 
-	messages := client.NewReader()
-	w := wire.NewReader(messages)
-	io.NewReader(conn, w)
-
-	for {
-		Handle(<-messages.Messages())
+	switch m.(type) {
+	case p2p.AskRequest:
+		m.(p2p.AskRequest).Reply(p2p.NewAskReply("it's ok"))
 	}
 }

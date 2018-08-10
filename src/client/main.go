@@ -3,9 +3,9 @@ package main
 import (
 	"net"
 	"github.com/sinea/network/client"
-	"github.com/sinea/network/wire"
 	"time"
-	"github.com/sinea/network/io"
+	"log"
+	"github.com/sinea/network/p2p"
 )
 
 func connectToServer() net.Conn {
@@ -17,17 +17,33 @@ func connectToServer() net.Conn {
 	return conn
 }
 
-func main() {
-
-	conn := connectToServer()
-	messageWriter := client.NewMessageWriter(wire.NewWriter(io.NewWriter(conn)))
+func wratata(writer client.MessageWriter, i interface{}) {
 	for {
-		messageWriter.Write(client.Hello{
-			Name: "bile",
-			Age:  30,
-		})
+		writer.Write(i)
 		time.Sleep(time.Second)
 	}
+}
 
-	time.Sleep(time.Hour)
+func main() {
+	log.Println("Starting client")
+	//conn := connectToServer()
+	//messageWriter := client.NewMessageWriter(wire.NewWriter(io.NewWriter(conn)))
+	//go wratata(messageWriter, client.Hello{"Me", 3})
+	//go wratata(messageWriter, client.Goodbye{":)"})
+	//
+	//time.Sleep(time.Hour)
+
+	c := p2p.NewClient()
+
+	if err := c.Connect("0.0.0.0:3333"); err != nil {
+		panic(err)
+	}
+
+	reply := <-c.Request(p2p.NewAskRequest(":)"), p2p.RequestOptions{Timeout: 10})
+
+	if r, ok := reply.(p2p.AskReply); ok {
+		log.Printf("Received reply %s", r.Result)
+	}
+
+	c.Message(p2p.PeerAuth{"123", "3333"})
 }
