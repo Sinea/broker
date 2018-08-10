@@ -17,5 +17,5 @@ func TestMessageWriter(t *testing.T) {
 	mock := &mockWriter{}
 	w := wire.NewWriter(mock)
 	writer := NewMessageWriter(w)
-	writer.Write(NewMessage(3, nil))
+	writer.Write(Hello{"xyz", 1})
 }

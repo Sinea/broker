@@ -1,26 +1,32 @@
 package client
 
-import "github.com/sinea/network/io"
+import (
+	"github.com/sinea/network/io"
+	"encoding/json"
+)
 
 type Reader interface {
 	io.Writer
-	Messages() <-chan Message
+	Messages() <-chan interface{}
 }
 
 type reader struct {
-	messages chan Message
+	messages chan interface{}
 }
 
 func (r *reader) Write(buffer []byte) {
-	r.messages <- NewMessage(buffer[0], buffer[2:])
+	var v = reverseID(buffer[0])
+	json.Unmarshal(buffer[1:], &v)
+
+	r.messages <- v
 }
 
-func (r *reader) Messages() <-chan Message {
+func (r *reader) Messages() <-chan interface{} {
 	return r.messages
 }
 
 func NewReader() Reader {
 	return &reader{
-		make(chan Message),
+		make(chan interface{}),
 	}
 }

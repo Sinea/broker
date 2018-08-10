@@ -1,18 +1,27 @@
 package client
 
-import "github.com/sinea/network/io"
+import (
+	"github.com/sinea/network/io"
+	"encoding/json"
+)
 
 type MessageWriter interface {
-	Write(serializable Message)
+	Write(m interface{})
 }
 
 type messageWriter struct {
 	next io.Writer
 }
 
-func (m *messageWriter) Write(message Message) {
-	buffer := []byte{message.Kind(), message.Flags()}
-	buffer = append(buffer, message.Body()...)
+func (m *messageWriter) Write(message interface{}) {
+	b, err := json.Marshal(message)
+
+	if err != nil {
+		panic(err)
+	}
+
+	buffer := []byte{getID(message)}
+	buffer = append(buffer, b...)
 
 	m.next.Write(buffer)
 }

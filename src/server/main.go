@@ -8,6 +8,21 @@ import (
 	"github.com/sinea/network/io"
 )
 
+func Handle(m interface{}) {
+	switch m.(type) {
+	case *client.Hello:
+		h := m.(*client.Hello)
+		log.Printf("Hello from %s", h.Name)
+		break
+	case *client.Goodbye:
+		g := m.(*client.Goodbye)
+		log.Printf("Goodbye %d", g.From)
+		break
+	default:
+		panic("unknown type")
+	}
+}
+
 func main() {
 
 	listener, _ := net.Listen("tcp", "0.0.0.0:3333")
@@ -19,10 +34,6 @@ func main() {
 	io.NewReader(conn, w)
 
 	for {
-		select {
-		case m := <-messages.Messages():
-			log.Printf("Received %d : %X", m.Kind(), m.Body())
-			break
-		}
+		Handle(<-messages.Messages())
 	}
 }

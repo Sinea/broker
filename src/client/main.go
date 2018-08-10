@@ -2,10 +2,10 @@ package main
 
 import (
 	"net"
+	"github.com/sinea/network/client"
+	"github.com/sinea/network/wire"
 	"time"
 	"github.com/sinea/network/io"
-	"github.com/sinea/network/wire"
-	"github.com/sinea/network/client"
 )
 
 func connectToServer() net.Conn {
@@ -18,12 +18,14 @@ func connectToServer() net.Conn {
 }
 
 func main() {
+
 	conn := connectToServer()
-	ioWriter := io.NewWriter(conn)
-	wireWriter := wire.NewWriter(ioWriter)
-	messageWriter := client.NewMessageWriter(wireWriter)
+	messageWriter := client.NewMessageWriter(wire.NewWriter(io.NewWriter(conn)))
 	for {
-		messageWriter.Write(client.NewMessage(5, []byte{0xCA, 0xFE}))
+		messageWriter.Write(client.Hello{
+			Name: "bile",
+			Age:  30,
+		})
 		time.Sleep(time.Second)
 	}
 
