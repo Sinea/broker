@@ -16,6 +16,7 @@ type Broker interface {
 }
 
 type broker struct {
+	nodeCount uint32 // Total number of nodes in cluster
 	numShards uint32 // Known number of shards
 	shardMask uint64 // Shard bit mask for the current node
 
