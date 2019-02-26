@@ -1,10 +1,13 @@
 package main
 
-import "broker/pkg/broker"
+import (
+	"broker/pkg/broker"
+)
 
 func main() {
-	b := broker.New()
-	b.Write("messages", []byte("john"))
-	b.Write("messagez", []byte("john"))
-	b.Write("messag", []byte("john"))
+	b := broker.New(3)
+	for _, t := range string("abcdefghijklmno1234567890!@#$%^&*()?><:{") {
+		b.Write(string(t), []byte(string(t)))
+
+	}
 }
