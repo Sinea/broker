@@ -1,1 +1,1 @@
-module broker
+module github.com/Sinea/broker

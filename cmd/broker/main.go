@@ -1,7 +1,7 @@
 package main
 
 import (
-	"broker/pkg/broker"
+	"github.com/Sinea/broker/pkg/broker"
 )
 
 func main() {
