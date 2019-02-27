@@ -1,12 +1,10 @@
 package broker
 
 import (
-	"fmt"
-	"hash/crc32"
+	"log"
+	"net"
 	"sync"
 )
-
-const MaxShards = 64
 
 type MessageWriter interface {
 	Write(topic string, data []byte)
@@ -19,53 +17,90 @@ type MessageReader interface {
 type Broker interface {
 	MessageWriter
 	MessageReader
+
+	Start(address string) error
+	Join(address string) error
+	PeerWrite(topic string, data []byte)
 }
 
 type broker struct {
-	nodeCount        uint32 // Total number of nodes in cluster
-	topicReplication uint32 // Known number of replicas for each topic
-	shardMask        uint64 // Shard bit mask for the current node
+	uncheckedPeers []*peer
+	topics         map[string]chan []byte
+	lock           *sync.Mutex
+}
 
-	shards map[uint64]shard
-	topics map[string][]chan []byte
-	lock   *sync.Mutex
+func (b *broker) Join(address string) error {
+	connection, err := net.Dial("tcp", address)
+	if err != nil {
+		return err
+	}
+	b.handle(connection)
+
+	return nil
+}
+
+func (b *broker) Start(address string) error {
+	listener, err := net.Listen("tcp", address)
+
+	if err != nil {
+		return err
+	}
+
+	defer closeListener(listener)
+
+	for {
+		connection, err := listener.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		b.handle(connection)
+	}
 }
 
 func (b *broker) Read(topic string) <-chan []byte {
 	b.lock.Lock()
-	out := make(chan []byte)
 	if _, ok := b.topics[topic]; !ok {
-		b.topics[topic] = make([]chan []byte, 0)
+		b.topics[topic] = make(chan []byte)
 	}
-	b.topics[topic] = append(b.topics[topic], out)
 	b.lock.Unlock()
 
-	return out
+	return b.topics[topic]
 }
 
 func (b *broker) Write(topic string, data []byte) {
-	// The data should be written to this shard
-	shardID := b.getShardID(topic)
-
-	fmt.Printf("Sending %s to shard %d\n", data, shardID)
+	// Send to local listeners
 	if out, ok := b.topics[topic]; ok {
-		for _, o := range out {
-			o <- data
-		}
+		out <- data
+	}
+
+	// Send to all peers
+	for _, p := range b.uncheckedPeers {
+		p.Write(topic, data)
 	}
 }
 
-func (b *broker) getShardID(topic string) uint64 {
-	table := crc32.MakeTable(crc32.IEEE)
-	checksum := crc32.Checksum([]byte(topic), table)
-	// The data should be written to this shard
-	return 1 << ((checksum % b.topicReplication) % MaxShards)
+func (b *broker) PeerWrite(topic string, data []byte) {
+	if out, ok := b.topics[topic]; ok {
+		out <- data
+	}
+}
+
+func closeListener(listener net.Listener) {
+	if err := listener.Close(); err != nil {
+		log.Println(err)
+	}
+}
+
+func (b *broker) handle(connection net.Conn) {
+	p := newPeer(b, connection)
+	b.uncheckedPeers = append(b.uncheckedPeers, &p)
+	go p.Read()
 }
 
 func New(shardCount uint32) Broker {
 	return &broker{
-		lock:             &sync.Mutex{},
-		topicReplication: shardCount,
-		topics:           map[string][]chan []byte{},
+		lock:           &sync.Mutex{},
+		topics:         make(map[string]chan []byte),
+		uncheckedPeers: make([]*peer, 0),
 	}
 }

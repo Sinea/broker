@@ -6,20 +6,21 @@ import (
 	"time"
 )
 
-func listen(b broker.Broker, topic string) {
+func listen(b broker.Broker, prefix, topic string) {
 	for t := range b.Read(topic) {
-		fmt.Println(t)
+		fmt.Println(prefix, t)
 	}
 }
 
 func main() {
 	b := broker.New(3)
-	go listen(b, "a")
-	go listen(b, "c")
-	time.Sleep(time.Second)
-	for _, t := range string("abcdefghijklmno1234567890!@#$%^&*()?><:{") {
-		b.Write(string(t), []byte(string(t)))
+
+	for i := 0; i < 3; i++ {
+		go listen(b, fmt.Sprintf("%d.", i), "a")
 	}
 
-	time.Sleep(time.Second)
+	for {
+		b.Write("a", []byte(string("a")))
+		time.Sleep(time.Second)
+	}
 }
