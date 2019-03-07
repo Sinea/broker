@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -18,5 +19,15 @@ func TestPeerProxy_Send(t *testing.T) {
 
 	mesh.Broadcast([]byte{1, 2, 3, 4})
 
-	mesh.Peer(3).Send([]byte{1, 2, 3, 4})
+	if p, err := mesh.Peer(3); err != nil {
+		p.Send([]byte{1, 2, 3, 4})
+	}
+
+	for message := range mesh.Read() {
+		fmt.Printf("Received %s from %d", string(message.Data), message.From)
+	}
+}
+
+func TestPeer_Route(t *testing.T) {
+	fmt.Printf("%d", buildMessage(1, 2, []byte("sinea")))
 }
