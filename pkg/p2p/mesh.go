@@ -25,7 +25,7 @@ type MessageRouter interface {
 }
 
 type Mesh interface {
-	Listen(address string)
+	Listen(address string) error
 	Join(address string) error
 	Broadcast(data []byte)
 	Peer(ID uint16) (Peer, error)
@@ -34,7 +34,8 @@ type Mesh interface {
 
 type mesh struct {
 	// Local ID
-	ID uint16
+	ID        uint16
+	isRunning bool
 
 	peers    map[uint16]PeerReader // Only connected peers
 	nodes    map[uint16]Peer       // All nodes
@@ -47,16 +48,22 @@ func (m *mesh) Read() <-chan Message {
 }
 
 // Listen on this address for peer connections
-func (m *mesh) Listen(address string) {
+func (m *mesh) Listen(address string) (err error) {
 	listener, err := net.Listen("tcp", address)
 
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	log.Printf("Node %d is listening on %s", m.ID, address)
 
-	for {
+	defer func() {
+		if err := listener.Close(); err != nil {
+			log.Print(err.Error())
+		}
+	}()
+
+	for m.isRunning {
 		connection, err := listener.Accept()
 		if err != nil {
 			log.Fatal(err)
@@ -64,6 +71,8 @@ func (m *mesh) Listen(address string) {
 		log.Println("New connection from: " + connection.RemoteAddr().String())
 		go m.handleConnection(connection)
 	}
+
+	return
 }
 
 // Join by connecting to the provided address
@@ -96,9 +105,10 @@ func (m *mesh) Peer(ID uint16) (Peer, error) {
 
 func New(id uint16) Mesh {
 	return &mesh{
-		ID:       id,
-		peers:    map[uint16]PeerReader{},
-		nodes:    map[uint16]Peer{},
-		messages: make(chan Message),
+		ID:        id,
+		isRunning: true,
+		peers:     map[uint16]PeerReader{},
+		nodes:     map[uint16]Peer{},
+		messages:  make(chan Message),
 	}
 }
