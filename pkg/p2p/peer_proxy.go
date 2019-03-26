@@ -1,9 +1,10 @@
 package p2p
 
 type peerProxy struct {
-	peerID uint16
+	peerID PeerID
 }
 
 // Send data via a route
-func (*peerProxy) Send(data []byte) {
+func (p *peerProxy) Send(data []byte) {
+	// Route the message through the connected peers
 }

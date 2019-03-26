@@ -31,7 +31,8 @@ func (p *peer) Read() {
 
 // Send data via socket
 func (p *peer) Send(data []byte) {
-	if n, err := p.connection.Write(buildMessage(p.fromID, p.peerID, data)); err == nil {
+	packedMessage := buildMessage(p.fromID, p.peerID, data)
+	if n, err := p.connection.Write(packedMessage); err == nil {
 		log.Printf("Wrote %d bytes", n)
 	} else {
 		log.Fatal(err)

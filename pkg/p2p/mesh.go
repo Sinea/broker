@@ -6,39 +6,13 @@ import (
 	"net"
 )
 
-type Message struct {
-	From uint16
-	Data []byte
-}
-
-type Peer interface {
-	PeerReader
-	Send(data []byte)
-}
-
-type PeerReader interface {
-	Read()
-}
-
-type MessageRouter interface {
-	Route(to uint16, data []byte)
-}
-
-type Mesh interface {
-	Listen(address string) error
-	Join(address string) error
-	Broadcast(data []byte)
-	Peer(ID uint16) (Peer, error)
-	Read() <-chan Message
-}
-
 type mesh struct {
 	// Local ID
 	ID        uint16
 	isRunning bool
 
-	peers    map[uint16]PeerReader // Only connected peers
-	nodes    map[uint16]Peer       // All nodes
+	peers    map[PeerID]Peer // Only connected peers
+	nodes    map[PeerID]Peer // All nodes
 	messages chan Message
 }
 
@@ -95,7 +69,7 @@ func (m *mesh) Broadcast(data []byte) {
 }
 
 // Peer return a peer by it's id
-func (m *mesh) Peer(ID uint16) (Peer, error) {
+func (m *mesh) Peer(ID PeerID) (Peer, error) {
 	if peer, ok := m.nodes[ID]; ok {
 		return peer, nil
 	}
@@ -107,8 +81,8 @@ func New(id uint16) Mesh {
 	return &mesh{
 		ID:        id,
 		isRunning: true,
-		peers:     map[uint16]PeerReader{},
-		nodes:     map[uint16]Peer{},
+		peers:     map[PeerID]Peer{},
+		nodes:     map[PeerID]Peer{},
 		messages:  make(chan Message),
 	}
 }
