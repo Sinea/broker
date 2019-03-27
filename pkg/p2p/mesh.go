@@ -47,9 +47,7 @@ func (m *mesh) Listen(address string) (err error) {
 			log.Fatal(err)
 		}
 		log.Println("New connection from: " + connection.RemoteAddr().String())
-		peer := newPeer(connection, m.messages, 0, m)
-		go peer.Read()
-		peer.write(buildMessage(0, 0, isSystemMessage|isHandshake, bytes(IdExchangeMessage{m.ID})))
+		m.handleConnection(connection)
 	}
 
 	return
@@ -62,9 +60,7 @@ func (m *mesh) Join(address string) (err error) {
 		return err
 	}
 	log.Printf("Connected to: %s", connection.RemoteAddr().String())
-	peer := newPeer(connection, m.messages, 0, m)
-	go peer.Read()
-	peer.write(buildMessage(0, 0, isSystemMessage|isHandshake, bytes(IdExchangeMessage{m.ID})))
+	m.handleConnection(connection)
 
 	return
 }
@@ -72,7 +68,9 @@ func (m *mesh) Join(address string) (err error) {
 // Broadcast send the data to all nodes
 func (m *mesh) Broadcast(data []byte) {
 	for _, node := range m.nodes {
-		node.Send(data)
+		if err := node.Send(data); err != nil {
+			log.Println(err)
+		}
 	}
 }
 
@@ -85,14 +83,26 @@ func (m *mesh) Peer(ID PeerID) (Peer, error) {
 	return nil, fmt.Errorf("unknown peer with id %d", ID)
 }
 
-func (m *mesh) sendToPeer(remotePeer PeerID, packedMessage []byte) {
-	fmt.Printf("Send to %d data: %d", remotePeer, packedMessage)
-	routeID := m.routingTable[remotePeer]
+// route an already packed message to a remote peer
+func (m *mesh) sendToPeer(remote PeerID, packedMessage []byte) {
+	fmt.Printf("Send to %d data: %d", remote, packedMessage)
+	routeID := m.routingTable[remote]
 	if peer, err := m.Peer(routeID); err != nil {
 		if err := peer.write(packedMessage); err != nil {
 			log.Fatal(err)
 		}
 	} else {
+		log.Fatal(err)
+	}
+}
+
+// handle a new connection
+func (m *mesh) handleConnection(connection net.Conn) {
+	peer := newPeer(connection, m.messages, m)
+	go peer.Read()
+	body := bytes(IdExchangeMessage{m.ID})
+	message := buildMessage(0, 0, isSystemMessage|isHandshake, body)
+	if err := peer.write(message); err != nil {
 		log.Fatal(err)
 	}
 }

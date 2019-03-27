@@ -122,11 +122,10 @@ func (p *peer) handleSystemMessage(src PeerID, flags byte, body []byte) {
 }
 
 // create a new peer
-func newPeer(connection net.Conn, messages chan<- Message, id PeerID, m *mesh) *peer {
+func newPeer(connection net.Conn, messages chan<- Message, m *mesh) *peer {
 	return &peer{
 		connection: connection,
 		messages:   messages,
-		local:      id,
 		buffer:     make([]byte, 0),
 		m:          m,
 	}
