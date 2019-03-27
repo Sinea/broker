@@ -99,7 +99,9 @@ func (p *peer) handle(message []byte) error {
 				log.Println("This is a handshake")
 
 				m := IdExchangeMessage{}
-				json.Unmarshal(body, &m)
+				if err := json.Unmarshal(body, &m); err != nil {
+					return err
+				}
 				log.Printf("Hello %d", m.Id)
 				p.fromID = m.Id
 				p.m.peers[m.Id] = p
