@@ -8,7 +8,10 @@ import (
 	"net"
 )
 
-const isSystemMessage byte = 1 << iota
+const (
+	isSystemMessage byte = 1 << iota
+	isHandshake
+)
 
 type peer struct {
 	peerID     PeerID
@@ -37,7 +40,7 @@ func (p *peer) Read() {
 
 // Send data via socket
 func (p *peer) Send(data []byte) {
-	packedMessage := buildMessage(p.fromID, p.peerID, data)
+	packedMessage := buildMessage(p.fromID, p.peerID, 0, data)
 	if err := p.write(packedMessage); err != nil {
 		log.Fatal(err.Error())
 	}
@@ -82,11 +85,14 @@ func (p *peer) handle(message []byte) error {
 		// Message is for the local node
 		src := PeerID(p.buffer[2])
 		flags := p.buffer[1]
-		body := p.buffer[10:]
+		body := p.buffer[8:]
 		p.buffer = p.buffer[8+messageSize:]
 		// Make something with the data
 		if (flags & isSystemMessage) != 0 {
 			log.Printf("Handle system messsage: %s", string(body))
+			if (message[1] & isHandshake) != 0 {
+				log.Println("This is a handshake")
+			}
 		} else {
 			p.messages <- Message{src, body}
 		}
