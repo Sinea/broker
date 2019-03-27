@@ -19,8 +19,8 @@ const (
 )
 
 type peer struct {
-	peerID     PeerID
-	fromID     PeerID
+	remote     PeerID
+	local      PeerID
 	connection net.Conn
 	messages   chan<- Message
 	m          *mesh
@@ -45,7 +45,7 @@ func (p *peer) Read() {
 
 // Send data via socket
 func (p *peer) Send(data []byte) {
-	packedMessage := buildMessage(p.fromID, p.peerID, 0, data)
+	packedMessage := buildMessage(p.local, p.remote, 0, data)
 	if err := p.write(packedMessage); err != nil {
 		log.Fatal(err.Error())
 	}
@@ -83,7 +83,7 @@ func (p *peer) handle(message []byte) error {
 
 	// Check if the message is for the local node
 	dst := PeerID(p.buffer[3])
-	if dst != p.peerID {
+	if dst != p.remote {
 		// Route the message to appropriate peer
 		p.m.sendToPeer(dst, p.buffer[:8+messageSize])
 	} else {
@@ -103,7 +103,7 @@ func (p *peer) handle(message []byte) error {
 					return err
 				}
 				log.Printf("Hello %d", m.Id)
-				p.fromID = m.Id
+				p.local = m.Id
 				p.m.peers[m.Id] = p
 				p.m.nodes[m.Id] = p
 
@@ -121,7 +121,7 @@ func newPeer(connection net.Conn, messages chan<- Message, id PeerID, m *mesh) *
 	return &peer{
 		connection: connection,
 		messages:   messages,
-		fromID:     id,
+		local:      id,
 		buffer:     make([]byte, 0),
 		m:          m,
 	}
