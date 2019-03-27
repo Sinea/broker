@@ -11,6 +11,9 @@ import (
 )
 
 const (
+	ReadBufferSize = 1024
+
+	// Message flags
 	isSystemMessage byte = 1 << iota
 	isHandshake
 )
@@ -26,7 +29,7 @@ type peer struct {
 
 // Read data from the socket and try to handle or route the data
 func (p *peer) Read() {
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, ReadBufferSize)
 	for {
 		if n, err := p.connection.Read(buffer); err != nil {
 			if err != io.EOF {
