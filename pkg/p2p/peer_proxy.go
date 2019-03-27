@@ -15,9 +15,11 @@ func (p *peerProxy) write(data []byte) error {
 }
 
 // Send data via a route
-func (p *peerProxy) Send(data []byte) {
+func (p *peerProxy) Send(data []byte) error {
 	t := buildMessage(p.local, p.remote, 0, data)
 	p.m.sendToPeer(p.remote, t)
+
+	return nil
 }
 
 // create a new peer proxy

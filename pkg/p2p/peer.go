@@ -44,17 +44,19 @@ func (p *peer) Read() {
 }
 
 // Send data via socket
-func (p *peer) Send(data []byte) {
+func (p *peer) Send(data []byte) error {
 	packedMessage := buildMessage(p.local, p.remote, 0, data)
 	if err := p.write(packedMessage); err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
+
+	return nil
 }
 
 // raw write to socket
 func (p *peer) write(message []byte) error {
 	if n, err := p.connection.Write(message); err != nil {
-		return err
+		return fmt.Errorf("error writing to socket: %s", err.Error())
 	} else if n < len(message) {
 		return errors.New("message not written")
 	}
@@ -95,25 +97,28 @@ func (p *peer) handle(message []byte) error {
 		// Make something with the data
 		if (flags & isSystemMessage) != 0 {
 			log.Printf("Handle system messsage: %s", string(body))
-			if (message[1] & isHandshake) != 0 {
-				log.Println("This is a handshake")
-
-				m := IdExchangeMessage{}
-				if err := json.Unmarshal(body, &m); err != nil {
-					return err
-				}
-				log.Printf("Hello %d", m.Id)
-				p.local = m.Id
-				p.m.peers[m.Id] = p
-				p.m.nodes[m.Id] = p
-
-			}
+			p.handleSystemMessage(src, flags, body)
 		} else {
 			p.messages <- Message{src, body}
 		}
 	}
 
 	return nil
+}
+
+func (p *peer) handleSystemMessage(src PeerID, flags byte, body []byte) {
+	if (flags & isHandshake) != 0 {
+		log.Println("This is a handshake")
+
+		m := IdExchangeMessage{}
+		if err := json.Unmarshal(body, &m); err != nil {
+			log.Println(err)
+		}
+		log.Printf("Hello %d", m.Id)
+		p.local = m.Id
+		p.m.peers[m.Id] = p
+		p.m.nodes[m.Id] = p
+	}
 }
 
 // create a new peer
