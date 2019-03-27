@@ -2,6 +2,8 @@ package p2p
 
 import (
 	"encoding/binary"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -50,8 +52,8 @@ func (p *peer) Send(data []byte) {
 func (p *peer) write(message []byte) error {
 	if n, err := p.connection.Write(message); err != nil {
 		return err
-	} else {
-		log.Printf("Wrote %d bytes", n)
+	} else if n < len(message) {
+		return errors.New("message not written")
 	}
 
 	return nil
@@ -92,6 +94,14 @@ func (p *peer) handle(message []byte) error {
 			log.Printf("Handle system messsage: %s", string(body))
 			if (message[1] & isHandshake) != 0 {
 				log.Println("This is a handshake")
+
+				m := IdExchangeMessage{}
+				json.Unmarshal(body, &m)
+				log.Printf("Hello %d", m.Id)
+				p.fromID = m.Id
+				p.m.peers[m.Id] = p
+				p.m.nodes[m.Id] = p
+
 			}
 		} else {
 			p.messages <- Message{src, body}
@@ -102,11 +112,12 @@ func (p *peer) handle(message []byte) error {
 }
 
 // create a new peer
-func newPeer(connection net.Conn, messages chan<- Message, id PeerID) *peer {
+func newPeer(connection net.Conn, messages chan<- Message, id PeerID, m *mesh) *peer {
 	return &peer{
 		connection: connection,
 		messages:   messages,
 		fromID:     id,
 		buffer:     make([]byte, 0),
+		m:          m,
 	}
 }

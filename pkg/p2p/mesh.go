@@ -47,7 +47,7 @@ func (m *mesh) Listen(address string) (err error) {
 			log.Fatal(err)
 		}
 		log.Println("New connection from: " + connection.RemoteAddr().String())
-		peer := newPeer(connection, m.messages, 0)
+		peer := newPeer(connection, m.messages, 0, m)
 		go peer.Read()
 		peer.write(buildMessage(0, 0, isSystemMessage|isHandshake, bytes(IdExchangeMessage{m.ID})))
 	}
@@ -62,7 +62,7 @@ func (m *mesh) Join(address string) (err error) {
 		return err
 	}
 	log.Printf("Connected to: %s", connection.RemoteAddr().String())
-	peer := newPeer(connection, m.messages, 0)
+	peer := newPeer(connection, m.messages, 0, m)
 	go peer.Read()
 	peer.write(buildMessage(0, 0, isSystemMessage|isHandshake, bytes(IdExchangeMessage{m.ID})))
 
