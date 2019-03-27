@@ -14,6 +14,8 @@ type mesh struct {
 	peers    map[PeerID]Peer // Only connected peers
 	nodes    map[PeerID]Peer // All nodes
 	messages chan Message
+
+	routingTable map[PeerID]PeerID
 }
 
 // Read channel with the messages aimed at this node
@@ -36,6 +38,8 @@ func (m *mesh) Listen(address string) (err error) {
 			log.Print(err.Error())
 		}
 	}()
+
+	m.isRunning = true
 
 	for m.isRunning {
 		connection, err := listener.Accept()
@@ -77,12 +81,22 @@ func (m *mesh) Peer(ID PeerID) (Peer, error) {
 	return nil, fmt.Errorf("unknown peer with id %d", ID)
 }
 
+func (m *mesh) sendToPeer(remotePeer PeerID, packedMessage []byte) {
+	fmt.Printf("Send to %d data: %d", remotePeer, packedMessage)
+	routeID := m.routingTable[remotePeer]
+	if peer, err := m.Peer(routeID); err != nil {
+		peer.write(packedMessage)
+	} else {
+		log.Fatal(err)
+	}
+}
+
 func New(id uint16) Mesh {
 	return &mesh{
-		ID:        id,
-		isRunning: true,
-		peers:     map[PeerID]Peer{},
-		nodes:     map[PeerID]Peer{},
-		messages:  make(chan Message),
+		ID:           id,
+		peers:        map[PeerID]Peer{},
+		nodes:        map[PeerID]Peer{},
+		messages:     make(chan Message),
+		routingTable: map[PeerID]PeerID{},
 	}
 }

@@ -8,6 +8,7 @@ type Message struct {
 }
 
 type Peer interface {
+	writer
 	Send(data []byte)
 }
 
@@ -17,4 +18,8 @@ type Mesh interface {
 	Broadcast(data []byte)
 	Peer(ID PeerID) (Peer, error)
 	Read() <-chan Message
+}
+
+type writer interface {
+	write(data []byte)
 }

@@ -13,7 +13,7 @@ func TestPeer_Broadcast(t *testing.T) {
 	p.Send([]byte{1, 2, 3, 4})
 }
 
-func TestPeerProxy_Send(t *testing.T) {
+func TestPeerProxy_Sendx(t *testing.T) {
 	var mesh Mesh
 	mesh.Listen("0.0.0.0:1111")
 

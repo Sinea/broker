@@ -8,11 +8,11 @@ import (
 )
 
 type peer struct {
-	messageID  uint32
-	peerID     uint16
-	fromID     uint16
+	peerID     PeerID
+	fromID     PeerID
 	connection net.Conn
 	messages   chan<- Message
+	m          *mesh
 }
 
 // Read data from the socket and try to handle or route the data
@@ -32,29 +32,31 @@ func (p *peer) Read() {
 // Send data via socket
 func (p *peer) Send(data []byte) {
 	packedMessage := buildMessage(p.fromID, p.peerID, data)
-	if n, err := p.connection.Write(packedMessage); err == nil {
+	p.write(packedMessage)
+}
+
+// raw write to socket
+func (p *peer) write(message []byte) {
+	if n, err := p.connection.Write(message); err == nil {
 		log.Printf("Wrote %d bytes", n)
 	} else {
 		log.Fatal(err)
 	}
 }
 
-// Route route this data through this node
-func (p *peer) Route(to uint16, data []byte) {
-	log.Printf("Routing to %d message: %s", to, data)
-}
-
+// handle a packed message
 func (p *peer) handle(message []byte) {
-	to := binary.BigEndian.Uint16(message[4:6])
+	to := PeerID(binary.BigEndian.Uint16(message[4:6]))
 	if to != p.peerID {
-		p.Route(to, message)
+		p.m.sendToPeer(to, message)
 	} else {
-		from := binary.BigEndian.Uint16(message[2:4])
+		from := PeerID(binary.BigEndian.Uint16(message[2:4]))
 		p.messages <- Message{from, message[10:]}
 	}
 }
 
-func newPeer(connection net.Conn, messages chan<- Message, id uint16) *peer {
+// create a new peer
+func newPeer(connection net.Conn, messages chan<- Message, id PeerID) *peer {
 	return &peer{
 		connection: connection,
 		messages:   messages,
