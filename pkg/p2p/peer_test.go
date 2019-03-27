@@ -1,33 +1,27 @@
 package p2p
 
-import (
-	"fmt"
-	"testing"
-)
+import "testing"
 
-func TestPeer_Broadcast(t *testing.T) {
-	p := &peer{peerID: 5}
-	p.Send([]byte{1, 2, 3, 4})
-	p.Send([]byte{1, 2, 3, 4})
-	p.Send([]byte{1, 2, 3, 4})
-	p.Send([]byte{1, 2, 3, 4})
-}
-
-func TestPeerProxy_Sendx(t *testing.T) {
-	var mesh Mesh
-	mesh.Listen("0.0.0.0:1111")
-
-	mesh.Broadcast([]byte{1, 2, 3, 4})
-
-	if p, err := mesh.Peer(3); err != nil {
-		p.Send([]byte{1, 2, 3, 4})
-	}
-
-	for message := range mesh.Read() {
-		fmt.Printf("Received %s from %d", string(message.Data), message.From)
+func TestPeer_handle_low_data(t *testing.T) {
+	peer := newPeer(nil, make(chan Message), 0)
+	err := peer.handle([]byte{0xCE})
+	if err != nil {
+		t.Fatal("No error expected")
 	}
 }
 
-func TestPeer_Route(t *testing.T) {
-	fmt.Printf("%d", buildMessage(1, 2, []byte("sinea")))
+func TestPeer_write_wrong_header(t *testing.T) {
+	peer := newPeer(nil, make(chan Message), 0)
+	err := peer.handle([]byte{0xCF, 0, 0, 0, 0, 0, 0, 0, 0})
+	if err == nil {
+		t.Fatal("No error expected")
+	}
+}
+
+func TestPeer_write_not_enaugh_data(t *testing.T) {
+	peer := newPeer(nil, make(chan Message), 0)
+	err := peer.handle([]byte{0xCE, 0, 0, 0, 0, 0, 0, 100})
+	if err != nil {
+		t.Fatal("No error expected")
+	}
 }

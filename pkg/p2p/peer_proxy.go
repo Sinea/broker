@@ -1,5 +1,7 @@
 package p2p
 
+import "errors"
+
 type peerProxy struct {
 	remote PeerID
 	local  PeerID
@@ -7,9 +9,9 @@ type peerProxy struct {
 }
 
 // this should never happen
-func (p *peerProxy) write(data []byte) {
+func (p *peerProxy) write(data []byte) error {
 	// Nothing happens here
-	panic(`this should be unreachable`)
+	return errors.New("this should be unreachable")
 }
 
 // Send data via a route

@@ -21,5 +21,5 @@ type Mesh interface {
 }
 
 type writer interface {
-	write(data []byte)
+	write(data []byte) error
 }

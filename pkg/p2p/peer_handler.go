@@ -1,6 +1,8 @@
 package p2p
 
 import (
+	"encoding/json"
+	"log"
 	"net"
 )
 
@@ -8,8 +10,8 @@ import (
 func (m *mesh) handleConnection(connection net.Conn) {
 	//// Send my ID
 	//log.Println("Sending my id")
-	//b := make([]byte, 2)
-	//binary.BigEndian.PutUint16(b, m.ID)
+	//b := bytes(IdExchangeMessage{m.ID})
+	//
 	//if n, err := connection.Write(b); err != nil {
 	//	log.Fatal(err)
 	//} else {
@@ -32,4 +34,14 @@ func (m *mesh) handleConnection(connection net.Conn) {
 	//log.Printf("Peer with id %d joined", peerID)
 	//m.nodes[peerID] = newPeer(connection, m.messages, m.ID)
 	//go m.nodes[peerID].Read()
+}
+
+func bytes(message interface{}) []byte {
+	b, err := json.Marshal(message)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return b
 }

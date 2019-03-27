@@ -8,7 +8,7 @@ import (
 
 type mesh struct {
 	// Local ID
-	ID        uint16
+	ID        PeerID
 	isRunning bool
 
 	peers    map[PeerID]Peer // Only connected peers
@@ -47,7 +47,8 @@ func (m *mesh) Listen(address string) (err error) {
 			log.Fatal(err)
 		}
 		log.Println("New connection from: " + connection.RemoteAddr().String())
-		go m.handleConnection(connection)
+		peer := newPeer(connection, m.messages, 0)
+		go peer.Read()
 	}
 
 	return
@@ -60,7 +61,8 @@ func (m *mesh) Join(address string) (err error) {
 		return err
 	}
 	log.Printf("Connected to: %s", connection.RemoteAddr().String())
-	go m.handleConnection(connection)
+	peer := newPeer(connection, m.messages, 0)
+	go peer.Read()
 
 	return
 }
@@ -85,13 +87,15 @@ func (m *mesh) sendToPeer(remotePeer PeerID, packedMessage []byte) {
 	fmt.Printf("Send to %d data: %d", remotePeer, packedMessage)
 	routeID := m.routingTable[remotePeer]
 	if peer, err := m.Peer(routeID); err != nil {
-		peer.write(packedMessage)
+		if err := peer.write(packedMessage); err != nil {
+			log.Fatal(err)
+		}
 	} else {
 		log.Fatal(err)
 	}
 }
 
-func New(id uint16) Mesh {
+func New(id PeerID) Mesh {
 	return &mesh{
 		ID:           id,
 		peers:        map[PeerID]Peer{},
