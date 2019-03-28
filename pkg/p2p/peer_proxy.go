@@ -8,6 +8,10 @@ type peerProxy struct {
 	m      *mesh
 }
 
+func (p *peerProxy) initializeHandshake(id PeerID) {
+	// Nothing
+}
+
 // this should never happen
 func (p *peerProxy) write(data []byte) error {
 	// Nothing happens here

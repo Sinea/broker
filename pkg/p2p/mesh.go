@@ -100,11 +100,7 @@ func (m *mesh) sendToPeer(remote PeerID, packedMessage []byte) {
 func (m *mesh) handleConnection(connection net.Conn) {
 	peer := newPeer(connection, m.messages, m)
 	go peer.Read()
-	body := bytes(IdExchangeMessage{m.ID})
-	message := buildMessage(0, 0, isSystemMessage|isHandshake, body)
-	if err := peer.write(message); err != nil {
-		log.Fatal(err)
-	}
+	peer.initializeHandshake(m.ID)
 }
 
 func New(id PeerID) Mesh {

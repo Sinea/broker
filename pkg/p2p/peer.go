@@ -27,6 +27,14 @@ type peer struct {
 	buffer     []byte
 }
 
+func (p *peer) initializeHandshake(id PeerID) {
+	body := bytes(IdExchangeMessage{id})
+	message := buildMessage(0, 0, isSystemMessage|isHandshake, body)
+	if err := p.write(message); err != nil {
+		log.Fatal(err)
+	}
+}
+
 // Read data from the socket and try to handle or route the data
 func (p *peer) Read() {
 	buffer := make([]byte, ReadBufferSize)
