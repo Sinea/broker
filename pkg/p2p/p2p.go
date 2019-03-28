@@ -9,8 +9,9 @@ type Message struct {
 
 type Peer interface {
 	writer
-	Send(data []byte) error
 	initializeHandshake(id PeerID)
+
+	Send(data []byte) error
 }
 
 type Mesh interface {

@@ -39,6 +39,13 @@ func (m *mesh) Listen(address string) (err error) {
 		}
 	}()
 
+	//go func() {
+	//	for {
+	//		log.Println(m.routingTable)
+	//		time.Sleep(time.Second*3)
+	//	}
+	//}()
+
 	m.isRunning = true
 
 	for m.isRunning {
@@ -85,14 +92,17 @@ func (m *mesh) Peer(ID PeerID) (Peer, error) {
 
 // route an already packed message to a remote peer
 func (m *mesh) sendToPeer(remote PeerID, packedMessage []byte) {
-	fmt.Printf("Send to %d data: %d", remote, packedMessage)
+	fmt.Printf("Send to %d data: %d\n", remote, packedMessage)
+	fmt.Printf("%#v\n", m.routingTable)
+	fmt.Printf("%#v\n", m.peers)
+	fmt.Printf("%#v\n", m.nodes)
 	routeID := m.routingTable[remote]
-	if peer, err := m.Peer(routeID); err != nil {
+	if peer, ok := m.peers[routeID]; ok {
 		if err := peer.write(packedMessage); err != nil {
-			log.Fatal(err)
+			log.Fatalf("Error writing to peer: %s", err)
 		}
 	} else {
-		log.Fatal(err)
+		log.Fatalf("No route to %d", remote)
 	}
 }
 
@@ -101,6 +111,15 @@ func (m *mesh) handleConnection(connection net.Conn) {
 	peer := newPeer(connection, m.messages, m)
 	go peer.Read()
 	peer.initializeHandshake(m.ID)
+}
+
+// return the connected peer ids
+func (m *mesh) peerIds() []PeerID {
+	result := make([]PeerID, 0)
+	for i, _ := range m.peers {
+		result = append(result, i)
+	}
+	return result
 }
 
 func New(id PeerID) Mesh {

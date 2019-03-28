@@ -15,16 +15,17 @@ func dump(mesh p2p.Mesh) {
 }
 
 func main() {
-	mesh := p2p.New(2)
-	go mesh.Listen("0.0.0.0:1111")
+	mesh := p2p.New(9)
+	go mesh.Listen("0.0.0.0:3333")
 	go dump(mesh)
+	mesh.Join("0.0.0.0:2222")
 
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
 		bytes, _ := reader.ReadBytes('\n')
 		log.Printf("Will send data %s", string(bytes))
-		if peer, _ := mesh.Peer(9); peer != nil {
+		if peer, _ := mesh.Peer(2); peer != nil {
 			peer.Send(bytes)
 		} else {
 			log.Println("Nil peer")

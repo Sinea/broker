@@ -15,7 +15,10 @@ const (
 
 	// Message flags
 	isSystemMessage byte = 1 << iota
-	isHandshake
+
+	// Message kinds
+	handshakeMessage byte = 1 + iota
+	newPeerMessage
 )
 
 type peer struct {
@@ -25,14 +28,6 @@ type peer struct {
 	messages   chan<- Message
 	m          *mesh
 	buffer     []byte
-}
-
-func (p *peer) initializeHandshake(id PeerID) {
-	body := bytes(IdExchangeMessage{id})
-	message := buildMessage(0, 0, isSystemMessage|isHandshake, body)
-	if err := p.write(message); err != nil {
-		log.Fatal(err)
-	}
 }
 
 // Read data from the socket and try to handle or route the data
@@ -59,6 +54,14 @@ func (p *peer) Send(data []byte) error {
 	}
 
 	return nil
+}
+
+// execute the handshake
+func (p *peer) initializeHandshake(id PeerID) {
+	message := buildSystemMessage(0, 0, isSystemMessage, handshakeMessage, IdExchangeMessage{id})
+	if err := p.write(message); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // raw write to socket
@@ -93,9 +96,11 @@ func (p *peer) handle(message []byte) error {
 
 	// Check if the message is for the local node
 	dst := PeerID(p.buffer[3])
-	if dst != p.remote {
+
+	if dst != p.m.ID && dst != 0 {
 		// Route the message to appropriate peer
 		p.m.sendToPeer(dst, p.buffer[:8+messageSize])
+		p.buffer = p.buffer[8+messageSize:]
 	} else {
 		// Message is for the local node
 		src := PeerID(p.buffer[2])
@@ -104,7 +109,6 @@ func (p *peer) handle(message []byte) error {
 		p.buffer = p.buffer[8+messageSize:]
 		// Make something with the data
 		if (flags & isSystemMessage) != 0 {
-			log.Printf("Handle system messsage: %s", string(body))
 			p.handleSystemMessage(src, flags, body)
 		} else {
 			p.messages <- Message{src, body}
@@ -115,17 +119,40 @@ func (p *peer) handle(message []byte) error {
 }
 
 func (p *peer) handleSystemMessage(src PeerID, flags byte, body []byte) {
-	if (flags & isHandshake) != 0 {
-		log.Println("This is a handshake")
-
+	kind := body[0]
+	log.Println(string(body[1:]))
+	switch kind {
+	case handshakeMessage:
 		m := IdExchangeMessage{}
-		if err := json.Unmarshal(body, &m); err != nil {
+		if err := json.Unmarshal(body[1:], &m); err != nil {
 			log.Println(err)
 		}
-		log.Printf("Hello %d", m.Id)
+		log.Printf("%d joined", m.Id)
 		p.local = m.Id
 		p.m.peers[m.Id] = p
 		p.m.nodes[m.Id] = p
+
+		// Notify all nodes that a new peer has joined
+		for i, pr := range p.m.peers {
+			message := buildSystemMessage(p.m.ID, i, isSystemMessage, newPeerMessage, PeerListMessage{
+				Peers: p.m.peerIds(),
+			})
+			pr.write(message)
+		}
+	case newPeerMessage:
+		m := PeerListMessage{}
+		if err := json.Unmarshal(body[1:], &m); err != nil {
+			log.Println(err)
+		}
+		log.Printf("We have new peers from %d -> %d\n", src, m.Peers)
+		for _, i := range m.Peers {
+			log.Println(i)
+			p.m.routingTable[i] = src
+			if p.m.nodes[i] == nil {
+				p.m.nodes[i] = newPeerProxy(p.m.ID, i, p.m)
+			}
+		}
+		fmt.Printf("%#v\n", p.m.routingTable)
 	}
 }
 
